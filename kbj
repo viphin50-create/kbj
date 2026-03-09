@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>iiko MDC Converter | ЧИКО Экосистема</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+        .drop-zone { border: 2px dashed #d1d5db; transition: all 0.3s ease; }
+        .drop-zone.active { border-color: #000; background-color: #f9fafb; }
+        .card { background: white; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .tech-font { font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 10px; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div>
+                <h1 class="text-3xl font-extrabold tracking-tight text-gray-900">IIKO <span class="text-indigo-600">PRO CONVERTER</span></h1>
+                <p class="text-gray-500 text-sm italic">Автоматизация R&D и Технологов | Специально для ЧИКО</p>
+            </div>
+            <div class="flex gap-3">
+                <button onclick="clearAll()" class="bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-lg text-sm font-semibold transition flex items-center">
+                    <i class="fas fa-trash-alt mr-2"></i> Очистить данные
+                </button>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+            <!-- Sidebar: Controls -->
+            <div class="lg:col-span-1 space-y-6">
+                <div class="card p-6 border-t-4 border-indigo-600">
+                    <h2 class="text-lg font-bold mb-4 flex items-center">
+                        <i class="fas fa-cloud-upload-alt mr-2 text-indigo-600"></i> Импорт файлов
+                    </h2>
+                    <div id="dropZone" class="drop-zone rounded-xl p-8 text-center cursor-pointer mb-4 hover:bg-gray-50" onclick="document.getElementById('fileInput').click()">
+                        <i class="fas fa-file-invoice text-4xl text-gray-300 mb-4"></i>
+                        <p class="text-xs text-gray-500 leading-relaxed">Закинь <b>.mdc</b> отчеты сюда пачкой (КБЖУ и Ингредиенты)</p>
+                        <input type="file" id="fileInput" class="hidden" multiple accept=".mdc">
+                    </div>
+                    <div id="fileList" class="space-y-2 max-h-48 overflow-y-auto pt-2">
+                        <!-- Сюда скрипт добавит список загруженных файлов -->
+                    </div>
+                </div>
+
+                <div class="card p-6">
+                    <h2 class="text-lg font-bold mb-4">Фильтры очистки</h2>
+                    <div class="space-y-4">
+                        <label class="flex items-center space-x-3 cursor-pointer p-2 hover:bg-gray-50 rounded transition">
+                            <input type="checkbox" id="filterPF" checked class="w-4 h-4 text-indigo-600 rounded">
+                            <span class="text-sm font-medium text-gray-700">Исключать ПФ и ФК</span>
+                        </label>
+                        <label class="flex items-center space-x-3 cursor-pointer p-2 hover:bg-gray-50 rounded transition">
+                            <input type="checkbox" id="filterMilk" checked class="w-4 h-4 text-indigo-600 rounded">
+                            <span class="text-sm font-medium text-gray-700">Исключать модификаторы молока</span>
+                        </label>
+                        <div class="pt-4 border-t border-gray-100">
+                            <p class="text-[10px] text-gray-400 uppercase font-bold mb-2">Автоматически убираем:</p>
+                            <div class="flex flex-wrap gap-1">
+                                <span class="bg-gray-100 text-gray-500 text-[9px] px-2 py-1 rounded">Расходники</span>
+                                <span class="bg-gray-100 text-gray-500 text-[9px] px-2 py-1 rounded">Упаковку</span>
+                                <span class="bg-gray-100 text-gray-500 text-[9px] px-2 py-1 rounded">Инвентарь</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Content Area: Table and Export -->
+            <div class="lg:col-span-3 space-y-6">
+                <!-- Status & Export Bar -->
+                <div id="statusBar" class="hidden card p-6 bg-gradient-to-r from-indigo-600 to-indigo-800 text-white flex flex-col md:flex-row justify-between items-center gap-4 shadow-xl shadow-indigo-200">
+                    <div>
+                        <p class="text-xs opacity-70 uppercase tracking-widest font-bold mb-1">Готово к экспорту</p>
+                        <span class="text-3xl font-black" id="statusText">0 позиций</span>
+                    </div>
+                    <button onclick="exportToExcel()" class="w-full md:w-auto bg-white text-indigo-700 hover:bg-indigo-50 px-8 py-4 rounded-2xl text-sm font-black shadow-2xl transition-all transform hover:scale-105 flex items-center justify-center">
+                        <i class="fas fa-file-excel mr-3 text-xl"></i> СКАЧАТЬ ЭКСЕЛЬ ПО ШАБЛОНУ
+                    </button>
+                </div>
+
+                <!-- Preview Table -->
+                <div class="card overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs" id="mainTable">
+                            <thead class="bg-gray-900 text-white uppercase tracking-tighter">
+                                <tr>
+                                    <th class="px-4 py-4 w-12 text-center">№</th>
+                                    <th class="px-4 py-4 min-w-[180px]">Блюдо</th>
+                                    <th class="px-4 py-4">Выход</th>
+                                    <th class="px-4 py-4 min-w-[280px]">Состав</th>
+                                    <th class="px-4 py-4 bg-indigo-900 text-center">Ж (100)</th>
+                                    <th class="px-4 py-4 bg-indigo-900 text-center">Б (100)</th>
+                                    <th class="px-4 py-4 bg-indigo-900 text-center">У (100)</th>
+                                    <th class="px-4 py-4 bg-indigo-900 text-center font-bold">Ккал (100)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tableBody" class="divide-y divide-gray-200">
+                                <tr id="emptyState">
+                                    <td colspan="8" class="px-6 py-24 text-center text-gray-400 italic text-base">
+                                        <div class="mb-4"><i class="fas fa-folder-open text-5xl opacity-20"></i></div>
+                                        Система готова. Загрузи файлы .mdc для анализа...
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Списки исключений (формула)
+        const stopList = ['пика', 'шпажка', 'стакан', 'крышка', 'контейнер', 'пакет', 'трубочка', 'салфетка', 'бокс', 'пергамент', 'упаковка'];
+        const milkList = ['выбор молока', 'обычное', 'кокосовое', 'растительное', 'альтернативное', 'молоко на выбор'];
+        
+        let processedData = {}; 
+
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+
+        // Drag & Drop
+        ['dragenter', 'dragover'].forEach(e => dropZone.addEventListener(e, (ev) => { ev.preventDefault(); dropZone.classList.add('active'); }));
+        ['dragleave', 'drop'].forEach(e => dropZone.addEventListener(e, (ev) => { ev.preventDefault(); dropZone.classList.remove('active'); }));
+        
+        dropZone.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files));
+        fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+        // Вырезаем вообще всё кроме букв для 100% совпадения (Чикен Байтсы "Сырный снег" -> чикенбайтсысырныйснег)
+        function normalizeKey(name) {
+            return name.toLowerCase().replace(/[^a-zа-яё]/g, '');
+        }
+
+        async function handleFiles(files) {
+            let documents = [];
+            
+            for (let file of files) {
+                const content = await file.text();
+                
+                let reportNameMatch = content.match(/<ReportName>(.*?)<\/ReportName>/i);
+                let reportName = reportNameMatch ? reportNameMatch[1].toLowerCase() : file.name.toLowerCase();
+                
+                let type = 'kbju';
+                if (reportName.includes('карта') || reportName.includes('ингредиент') || reportName.includes('состав')) {
+                    type = 'ingr';
+                }
+                
+                documents.push({ name: file.name, content: content, type: type });
+                addFileToList(file.name, type === 'ingr' ? 'Состав' : 'КБЖУ');
+            }
+
+            let kbjuDocs = documents.filter(d => d.type === 'kbju');
+            let ingrDocs = documents.filter(d => d.type === 'ingr');
+
+            // КБЖУ формирует скелет базы
+            for (let doc of kbjuDocs) parseMdc(doc.content, 'kbju');
+            // Ингредиенты накладываются поверх
+            for (let doc of ingrDocs) parseMdc(doc.content, 'ingr');
+
+            renderTable();
+        }
+
+        function addFileToList(name, typeText) {
+            const list = document.getElementById('fileList');
+            const item = document.createElement('div');
+            let icon = typeText === 'Состав' ? 'fa-carrot text-orange-400' : 'fa-fire text-red-400';
+            item.className = 'text-[10px] bg-indigo-50 border border-indigo-100 p-2 rounded flex justify-between items-center animate-fade-in mb-2';
+            item.innerHTML = `<span><i class="fas ${icon} mr-2"></i>${name} <b class="ml-1 opacity-50">[${typeText}]</b></span> <i class="fas fa-check text-indigo-500"></i>`;
+            list.appendChild(item);
+        }
+
+        function parseMdc(xmlText, type) {
+            let elements = [];
+            
+            const tagRegex = /<[^\s>]+\s+([^>]+)>/g;
+            let match;
+            while ((match = tagRegex.exec(xmlText)) !== null) {
+                let attrs = match[1];
+                if (attrs.includes('text=')) {
+                    let textMatch = attrs.match(/text="([^"]*)"/);
+                    let rcMatch = attrs.match(/rc="([^"]*)"/); 
+                    
+                    if (textMatch) {
+                        let text = textMatch[1]
+                            .replace(/&#xD;/g, '').replace(/&#xA;/g, ' ')
+                            .replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+                            .replace(/&amp;/g, '&').replace(/&apos;/g, "'").trim();
+                        
+                        if (text) {
+                            let top = 0, left = 0;
+                            if (rcMatch) {
+                                let parts = rcMatch[1].split(',');
+                                left = parseFloat(parts[0]) || 0;
+                                top = parseFloat(parts[1]) || 0;
+                            }
+                            elements.push({ text, top, left });
+                        }
+                    }
+                }
+            }
+
+            elements.sort((a, b) => {
+                if (Math.abs(a.top - b.top) > 0.3) {
+                    return a.top - b.top;
+                }
+                return a.left - b.left;
+            });
+
+            if (type === 'kbju') {
+                let rows = [];
+                elements.forEach(el => {
+                    let added = false;
+                    for (let row of rows) {
+                        if (Math.abs(row.y - el.top) < 0.25) {
+                            row.items.push(el);
+                            added = true;
+                            break;
+                        }
+                    }
+                    if (!added) {
+                        rows.push({ y: el.top, items: [el] });
+                    }
+                });
+                rows.sort((a, b) => a.y - b.y);
+                rows.forEach(row => row.items.sort((a, b) => a.left - b.left));
+                processKbju(rows);
+            } else {
+                // Для Ингредиентов нам достаточно сплошного потока слов
+                let words = elements.map(el => el.text);
+                processIngredients(words);
+            }
+        }
+
+        function processKbju(rows) {
+            rows.forEach(row => {
+                let texts = row.items.map(i => i.text.trim()).filter(t => t !== "");
+                if (texts.length < 5) return;
+
+                let fullRowText = texts.join(" ").toLowerCase();
+
+                if (fullRowText.includes("предприятие") || 
+                    fullRowText.includes("белки") || 
+                    fullRowText.includes("ккал") || 
+                    fullRowText.includes("содержание в 100") ||
+                    fullRowText.includes("пищевая и энергетическая")) {
+                    return;
+                }
+
+                let yieldIndex = texts.findIndex(t => /^\d+[,.]\d+$/.test(t) || /^\d+\/\d+/.test(t) || /^\d+\s*шт/i.test(t) || /^\d+\s*г/i.test(t));
+                
+                if (yieldIndex > 0) {
+                    let rawDishName = texts.slice(0, yieldIndex).join(" ");
+                    
+                    let cleanDishName = rawDishName
+                        .replace(/^[0-9\s№]+/, '') 
+                        .replace(/\b([a-zA-Zа-яА-ЯёЁ]*\d+[a-zA-Zа-яА-ЯёЁ]*)\b/g, '') 
+                        .replace(/\b(chicko|чико|рф|цо|меню|категория|артикул)\b/gi, '') 
+                        .replace(/^[^a-zA-Zа-яА-ЯёЁ]+/, '') 
+                        .replace(/\s+/g, ' ')
+                        .trim();
+
+                    if (!cleanDishName) cleanDishName = rawDishName; 
+
+                    let weight = texts[yieldIndex];
+                    let numbers = texts.slice(yieldIndex + 1);
+
+                    let cleanNumbers = numbers.filter(n => /^[\d.,\s-]+$/.test(n) || n === "0");
+                    if (cleanDishName && cleanNumbers.length >= 8) {
+                        
+                        let key = 'dish_' + Math.random().toString(36).substr(2, 9); 
+                        
+                        processedData[key] = createEmptyRow(cleanDishName);
+                        processedData[key].rawName = rawDishName; // Сохраняем оригинал для мэтчинга
+                        
+                        processedData[key].weight = weight;
+                        processedData[key].b100 = cleanNumbers[0] || "0";
+                        processedData[key].j100 = cleanNumbers[1] || "0";
+                        processedData[key].u100 = cleanNumbers[2] || "0";
+                        processedData[key].kcal100 = cleanNumbers[3] || "0";
+                        processedData[key].kj100 = cleanNumbers[4] || "0";
+                        
+                        processedData[key].bPort = cleanNumbers[5] || "0";
+                        processedData[key].jPort = cleanNumbers[6] || "0";
+                        processedData[key].uPort = cleanNumbers[7] || "0";
+                        processedData[key].kcalPort = cleanNumbers[8] || "0";
+                        processedData[key].kjPort = cleanNumbers[9] || "0";
+                    }
+                }
+            });
+        }
+
+        function processIngredients(words) {
+            let currentDishName = "";
+            let ingredients = [];
+            let isListStarted = false;
+
+            const useFilterPF = document.getElementById('filterPF').checked;
+            const useFilterMilk = document.getElementById('filterMilk').checked;
+
+            const saveCurrentDish = () => {
+                if (currentDishName && ingredients.length > 0) {
+                    let normIngrName = normalizeKey(currentDishName);
+                    
+                    let targetKey = Object.keys(processedData).find(kbjuKey => {
+                        let normKbjuName = normalizeKey(processedData[kbjuKey].rawName);
+                        return normKbjuName === normIngrName || normKbjuName.includes(normIngrName) || normIngrName.includes(normKbjuName);
+                    });
+                    
+                    // Убираем дубликаты, переводим все в нижний регистр, склеиваем через запятую
+                    let uniqueIngredients = [...new Set(ingredients)].map(s => s.toLowerCase());
+                    let resStr = uniqueIngredients.join(', ');
+                    
+                    // Делаем только самую первую букву во всей строке заглавной
+                    let res = resStr.charAt(0).toUpperCase() + resStr.slice(1);
+                    
+                    if (targetKey) {
+                        processedData[targetKey].name = currentDishName; 
+                        processedData[targetKey].composition = res;
+                    } else {
+                        let newKey = 'dish_' + Math.random().toString(36).substr(2, 9);
+                        processedData[newKey] = createEmptyRow(currentDishName);
+                        processedData[newKey].composition = res;
+                    }
+                }
+                ingredients = [];
+            }
+
+            const skipHeaders = [
+                "№", "наименование продукта", "ед. изм.", "брутто в ед. изм.", "вес брутто, кг.", 
+                "вес нетто или п/ф, кг", "вес готового продукта, кг", "уро- вень", "уровень"
+            ];
+
+            for (let i = 0; i < words.length; i++) {
+                let w = words[i].trim();
+                if (!w) continue;
+                let low = w.toLowerCase();
+
+                // Ищем название: оно всегда стоит ПЕРЕД "Технологическая карта"
+                if (low.includes("технологическая карта") || low.includes("карта ингредиентов")) {
+                    // Отматываем назад на 1-4 слова, чтобы найти красивое название
+                    for (let j = i - 1; j >= Math.max(0, i - 5); j--) {
+                        let prev = words[j].trim();
+                        // Игнорируем даты, ИП, ИНН
+                        if (prev && !/^\d{2}\.\d{2}\.\d{4}$/.test(prev) && !prev.includes("ИП ") && !prev.includes("ИНН")) {
+                            if (currentDishName !== prev) {
+                                saveCurrentDish();
+                                currentDishName = prev;
+                            }
+                            break;
+                        }
+                    }
+                }
+                
+                // Фолбэк для первого блюда в документе
+                if (!currentDishName && i < 5 && w && !/^\d/.test(w) && !w.includes("ИП ") && !w.includes("Область")) {
+                    currentDishName = w;
+                }
+
+                // Триггер начала таблицы состава
+                if (low === "наименование продукта" || low === "ед. изм.") {
+                    isListStarted = true;
+                    continue;
+                }
+
+                if (isListStarted) {
+                    // Триггеры конца списка
+                    if (low.includes("требования к оформлению") || low.includes("итого") || low.includes("вес готового блюда")) {
+                        isListStarted = false; 
+                        continue;
+                    }
+
+                    // Чистим мусор и цифры
+                    if (/^[\d\s.,/:-]+$/.test(low)) continue;
+                    if (["кг", "г", "л", "мл", "шт", "порц"].includes(low)) continue;
+                    if (skipHeaders.some(h => low === h || low.includes(h))) continue;
+                    
+                    // Убираем все слова из стоп-листа (в т.ч. упаковка, шпажка)
+                    if (stopList.some(s => low.includes(s))) continue;
+                    if (useFilterMilk && milkList.some(s => low.includes(s))) continue;
+                    
+                    // Жестко убираем все упоминания ФК
+                    if (/(^|[^а-яё])фк([^а-яё]|$)/i.test(low)) continue;
+
+                    let cleanedName = "";
+
+                    // Исключение: ПФ Вода питьевая (оставляем просто "вода")
+                    if (low.includes('вода')) {
+                        cleanedName = "вода";
+                    } 
+                    // Оставляем только то, что идет с "т." или "т "
+                    else if (/(^|[^а-яё])т\.?\s+/i.test(low)) {
+                        // Удаляем "т.", "пф", "п/ф" 
+                        cleanedName = low.replace(/(^|[^а-яё])(п\/?ф|т)\.?\s+/ig, ' ').trim();
+                        // Убираем висячие символы в начале, если остались
+                        cleanedName = cleanedName.replace(/^[^a-zа-яё]+/i, '').trim();
+                    } else {
+                        // Если нет т. и не вода - жестко пропускаем!
+                        continue;
+                    }
+
+                    if (cleanedName && cleanedName.length > 2) {
+                        ingredients.push(cleanedName);
+                    }
+                }
+            }
+            saveCurrentDish(); // Закидываем последнюю карточку
+        }
+
+        function createEmptyRow(name) {
+            return { 
+                name, weight: "", composition: "", 
+                j100: "0", b100: "0", u100: "0", kcal100: "0", kj100: "0",
+                jPort: "0", bPort: "0", uPort: "0", kcalPort: "0", kjPort: "0",
+                rawName: name
+            };
+        }
+
+        function renderTable() {
+            const body = document.getElementById('tableBody');
+            const bar = document.getElementById('statusBar');
+            const keys = Object.keys(processedData);
+            
+            if (keys.length > 0) {
+                body.innerHTML = "";
+                bar.classList.remove('hidden');
+                document.getElementById('statusText').innerText = `${keys.length} блюд`;
+                
+                Object.values(processedData).forEach((item, index) => {
+                    const row = `
+                        <tr class="hover:bg-gray-50 transition border-b border-gray-100">
+                            <td class="px-4 py-4 text-center text-gray-400 font-mono">${index + 1}</td>
+                            <td class="px-4 py-4 font-bold text-gray-900">${item.name}</td>
+                            <td class="px-4 py-4 text-gray-500">${item.weight}</td>
+                            <td class="px-4 py-4 text-[10px] text-gray-400 max-w-sm truncate" title="${item.composition}">${item.composition || '—'}</td>
+                            <td class="px-4 py-4 text-center tech-font text-indigo-600">${item.j100}</td>
+                            <td class="px-4 py-4 text-center tech-font text-indigo-600">${item.b100}</td>
+                            <td class="px-4 py-4 text-center tech-font text-indigo-600">${item.u100}</td>
+                            <td class="px-4 py-4 text-center tech-font text-indigo-700 font-black">${item.kcal100}</td>
+                        </tr>
+                    `;
+                    body.insertAdjacentHTML('beforeend', row);
+                });
+            }
+        }
+
+        function exportToExcel() {
+            const headerRow1 = ["№", "Наименование блюда", "Цена", "Выход блюда, кг.", "Выбор молока Обычное / Кокосовое", "Состав", "Содержание в 100 г. блюда", "", "", "", "", "Содержание в 1 порц. блюда", "", "", "", ""];
+            const headerRow2 = ["", "", "", "", "", "", "Жиры, г.", "Белки, г.", "Углеводы, г.", "Калорийность, ккал.", "кДж", "Жиры, г.", "Белки, г.", "Углеводы, г.", "Калорийность, ккал.", "кДж"];
+
+            const rows = Object.values(processedData).map((i, idx) => [
+                idx + 1,
+                i.name,
+                "", 
+                i.weight,
+                "", 
+                i.composition,
+                i.j100, i.b100, i.u100, i.kcal100, i.kj100,
+                i.jPort, i.bPort, i.uPort, i.kcalPort, i.kjPort
+            ]);
+
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet([headerRow1, headerRow2, ...rows]);
+            
+            ws['!merges'] = [
+                { s: {r:0, c:6}, e: {r:0, c:10} }, 
+                { s: {r:0, c:11}, e: {r:0, c:15} } 
+            ];
+
+            XLSX.utils.book_append_sheet(wb, ws, "Меню ЧИКО");
+            
+            const fileName = `CHIKO_Menu_Export_${new Date().toISOString().slice(0,10)}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+        }
+
+        function clearAll() {
+            if (confirm('Очистить все загруженные данные?')) {
+                processedData = {};
+                document.getElementById('tableBody').innerHTML = '<tr id="emptyState"><td colspan="8" class="px-6 py-24 text-center text-gray-400 italic text-base">Система готова. Загрузи файлы .mdc для анализа...</td></tr>';
+                document.getElementById('fileList').innerHTML = "";
+                document.getElementById('statusBar').classList.add('hidden');
+            }
+        }
+    </script>
+</body>
+</html>
